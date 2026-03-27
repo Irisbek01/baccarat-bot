@@ -6,62 +6,78 @@ bot = telebot.TeleBot(TOKEN)
 
 history = []
 
-def get_strike_bonus(history, suit):
-    streak = 0
-    for h in reversed(history):
-        if h == suit:
-            streak += 1
-        else:
-            break
-    return -streak * 2
-
-def weighted_score(history, suit):
-    score = 0
-    count = history.count(suit)
-    score += (10 - count)
-    last10 = history[-10:]
-    score += (10 - last10.count(suit)) * 2
-    score += get_strike_bonus(history, suit)
-    return score
-
-def predict_best(history):
-    suits = ['♠️','♥️','♦️','♣️']
-    scores = {s: weighted_score(history, s) for s in suits}
-    return max(scores, key=scores.get)
+suits = ['♠️','♥️','♦️','♣️']
 
 suit_map = {
     "пик": "♠️",
-    "пики": "♠️",
-    "♠️": "♠️",
-
     "черви": "♥️",
-    "червый": "♥️",
-    "♥️": "♥️",
-
     "буби": "♦️",
-    "бубный": "♦️",
-    "♦️": "♦️",
-
     "треф": "♣️",
-    "крести": "♣️",
+    "♠️": "♠️",
+    "♥️": "♥️",
+    "♦️": "♦️",
     "♣️": "♣️"
 }
 
+def analyze(history):
+    total = len(history)
+    counts = {s: history.count(s) for s in suits}
+
+    # вероятность
+    probs = {s: int((counts[s]/total)*100) for s in suits}
+
+    # скоринг
+    scores = {}
+    for s in suits:
+        score = 0
+        score += (10 - counts[s]) * 2
+        score += (5 - history[-5:].count(s)) * 3
+        scores[s] = score
+
+    best = max(scores, key=scores.get)
+    second = sorted(scores, key=scores.get, reverse=True)[1]
+
+    # уверенность
+    if probs[best] > 55:
+        conf = "ЖОҒАРЫ"
+    elif probs[best] > 40:
+        conf = "ОРТА"
+    else:
+        conf = "ТӨМЕН"
+
+    return best, second, probs, conf
+
+
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "🔥 МАСТ БОТ\nЖаз: пик / черви / буби / треф")
+    bot.send_message(message.chat.id, "Маст жібер: пик / черви / буби / треф")
+
 
 @bot.message_handler(func=lambda message: True)
 def handle(message):
-    text = message.text.strip().lower()
+    text = message.text.lower()
 
     if text in suit_map:
-        suit = suit_map[text]
-        history.append(suit)
+        history.append(suit_map[text])
 
         if len(history) >= 5:
-            best = predict_best(history)
-            bot.send_message(message.chat.id, f"🎯 {best}")
+            best, second, probs, conf = analyze(history)
+
+            msg = f"""📊 Анализ масти
+
+🎯 Негізгі: {best}
+⚡ Альтернатива: {second}
+
+📈 Вероятность:
+♠️ — {probs['♠️']}%
+♥️ — {probs['♥️']}%
+♦️ — {probs['♦️']}%
+♣️ — {probs['♣️']}%
+
+📊 Уверенность: {conf}
+"""
+            bot.send_message(message.chat.id, msg)
+
         else:
             bot.send_message(message.chat.id, "Тағы жібер (кемі 5)")
     else:
